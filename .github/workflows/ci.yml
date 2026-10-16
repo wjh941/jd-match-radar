@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: 语法检查
+        run: node --check server/store-server.js && node --check server/seed.js && node --check lib/tokenize.js && node --check lib/skills.js && node --check lib/bm25.js && node --check lib/scorer.js && node --check evals/run-evals.js
+      - name: 生成种子数据
+        run: node server/seed.js
+      - name: 单元测试
+        run: npm test
+      - name: 确定性评测（Recall@3 ≥ 0.9 且 MRR ≥ 0.85，跌破即失败）
+        run: node evals/run-evals.js

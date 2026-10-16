@@ -1,0 +1,16 @@
+{
+  "name": "jd-match-radar",
+  "version": "0.1.0",
+  "description": "岗位匹配雷达 —— JD↔简历双通道可解释匹配检索：BM25 + 技能词典，带确定性评测集与差距分析（零 npm 依赖）",
+  "type": "commonjs",
+  "scripts": {
+    "seed": "node server/seed.js",
+    "server": "node server/store-server.js",
+    "eval": "node evals/run-evals.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>岗位匹配雷达 · JD↔简历可解释匹配</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #21262d; --text: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --good: #3fb950; --warn: #d29922; --bad: #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; }
+  header .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 2px 10px; }
+  header .spacer { flex: 1; }
+  header input { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 10px; width: 260px; font-size: 12px; }
+  header .hint { font-size: 11px; color: var(--muted); }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px 24px; max-width: 1400px; margin: 0 auto; }
+  .jd-list h2, .panel h2 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+  .jd-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; background: var(--panel); }
+  .jd-card:hover { border-color: var(--accent); }
+  .jd-card.active { border-color: var(--accent); background: #12233a; }
+  .jd-card .t { font-size: 13px; font-weight: 600; }
+  .jd-card .m { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .candidate { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: var(--panel); }
+  .candidate .row1 { display: flex; align-items: center; gap: 12px; }
+  .candidate .rank { font-size: 13px; color: var(--muted); width: 28px; }
+  .candidate .name { font-size: 15px; font-weight: 700; }
+  .candidate .meta { font-size: 12px; color: var(--muted); }
+  .candidate .score { margin-left: auto; font-size: 22px; font-weight: 800; }
+  .score.s-high { color: var(--good); } .score.s-mid { color: var(--warn); } .score.s-low { color: var(--bad); }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; margin: 10px 0; overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; }
+  .bar .sk { background: var(--accent); } .bar .tx { background: #a371f7; } .bar .st { background: var(--good); }
+  .legend { font-size: 11px; color: var(--muted); display: flex; gap: 14px; margin-bottom: 10px; }
+  .legend b { color: var(--text); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .chip { font-size: 11px; border-radius: 10px; padding: 2px 9px; border: 1px solid var(--line); }
+  .chip.hit { border-color: var(--good); color: var(--good); }
+  .chip.miss { border-color: var(--bad); color: var(--bad); opacity: .85; }
+  .evidence { font-size: 12px; color: var(--muted); margin: 4px 0; padding-left: 10px; border-left: 2px solid var(--line); }
+  .evidence b { color: var(--text); }
+  .gaps { font-size: 12px; color: var(--warn); margin-top: 6px; }
+  .comment { margin-top: 8px; font-size: 12px; color: var(--accent); white-space: pre-wrap; }
+  .btn { background: #21262d; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .evals-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .evals-table td, .evals-table th { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
+  .summary { font-size: 14px; margin-bottom: 12px; }
+  .summary b { color: var(--good); }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  nav { display: flex; gap: 8px; margin-bottom: 12px; }
+  nav .btn.active { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎯 岗位匹配雷达</h1>
+  <span class="tag">JD ↔ 简历 · 可解释匹配</span>
+  <span class="tag">BM25 + 技能词典 · 零 npm 依赖</span>
+  <div class="spacer"></div>
+  <input id="apiKey" type="password" placeholder="LLM API Key（可选，仅存本机）">
+  <span class="hint">用于生成匹配评语</span>
+</header>
+<main>
+  <section class="jd-list">
+    <h2>岗位 JD</h2>
+    <div id="jds"></div>
+  </section>
+  <section class="panel">
+    <nav>
+      <button class="btn active" id="tabMatch">匹配结果</button>
+      <button class="btn" id="tabEvals">评测看板</button>
+    </nav>
+    <div id="content"><div class="empty">← 选择一个岗位开始</div></div>
+  </section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let jds = [];
+
+async function loadJds() {
+  const res = await fetch('/api/jds');
+  const data = await res.json();
+  jds = data.jds;
+  $('#jds').innerHTML = jds.map(j => `
+    <div class="jd-card" data-id="${j.id}">
+      <div class="t">${esc(j.title)}</div>
+      <div class="m">要求 ${j.minYears} 年 · ${esc(j.education)}</div>
+    </div>`).join('');
+  document.querySelectorAll('.jd-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.jd-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      showMatch(card.dataset.id, card.querySelector('.t').textContent);
+    });
+  });
+}
+
+async function showMatch(jdId, title) {
+  $('#content').innerHTML = '<div class="empty">匹配计算中…</div>';
+  const res = await fetch('/api/match/' + jdId);
+  const data = await res.json();
+  const html = `<h2>${esc(title)} · 候选人匹配</h2>` + data.results.map((r, i) => {
+    const cls = r.score >= 70 ? 's-high' : r.score >= 40 ? 's-mid' : 's-low';
+    const coreChips = data.requirements.core.map(s =>
+      `<span class="chip ${r.gaps.includes(s.canonical) ? 'miss' : 'hit'}">${esc(s.canonical)}</span>`).join('');
+    const evidence = r.coreEvidence.map(e =>
+      `<div class="evidence"><b>${esc(e.skill)}</b>：…${esc(e.snippet)}…</div>`).join('');
+    return `<div class="candidate">
+      <div class="row1">
+        <span class="rank">#${i + 1}</span>
+        <span class="name">${esc(r.name)}</span>
+        <span class="meta">${r.years} 年经验 · ${esc(r.education)}</span>
+        <span class="score ${cls}">${r.score}</span>
+      </div>
+      <div class="bar">
+        <i class="sk" style="width:${r.breakdown.skill * 0.55}%"></i>
+        <i class="tx" style="width:${r.breakdown.text * 0.35}%"></i>
+        <i class="st" style="width:${r.breakdown.structural * 0.10}%"></i>
+      </div>
+      <div class="legend"><span>技能 <b>${r.breakdown.skill}</b></span><span>文本相关 <b>${r.breakdown.text}</b></span><span>结构条件 <b>${r.breakdown.structural}</b></span>${r.breakdown.structuralReasons.map(x => `<span>${esc(x)}</span>`).join('')}</div>
+      <div class="chips">${coreChips}</div>
+      ${evidence}
+      ${r.gaps.length ? `<div class="gaps">⚠ 缺口：${r.gaps.map(esc).join(' / ')}</div>` : ''}
+      <div style="margin-top:8px"><button class="btn" data-comment="${r.resumeId}" data-title="${esc(title)}">🤖 生成 LLM 匹配评语</button></div>
+      <div class="comment" id="c-${r.resumeId}"></div>
+    </div>`;
+  }).join('');
+  $('#content').innerHTML = html;
+  document.querySelectorAll('[data-comment]').forEach(btn => {
+    btn.addEventListener('click', () => genComment(jdId, btn.dataset.comment, btn.dataset.title));
+  });
+}
+
+async function genComment(jdId, resumeId, title) {
+  const out = document.getElementById('c-' + resumeId);
+  out.textContent = '生成中…';
+  try {
+    const res = await fetch('/api/comment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jdId, resumeId, apiKey: $('#apiKey').value.trim() }),
+    });
+    const data = await res.json();
+    out.textContent = data.comment ? `🤖 ${data.comment}` : `⚠ ${data.error}`;
+  } catch { out.textContent = '⚠ 网络异常'; }
+}
+
+async function showEvals() {
+  const res = await fetch('/api/evals');
+  const data = await res.json();
+  $('#content').innerHTML = `<h2>确定性评测 · 真值标注（无随机/无网络，CI 可复现）</h2>
+    <div class="summary">Macro <b>Recall@3 = ${data.macroRecallAt3.toFixed(3)}</b> · Macro <b>MRR = ${data.macroMrr.toFixed(3)}</b>（门禁：≥0.90 / ≥0.85）</div>
+    <table class="evals-table"><tr><th>岗位</th><th>Recall@3</th><th>MRR</th><th>真值命中</th></tr>
+    ${data.perJd.map(r => `<tr><td>${esc(r.jdId)} ${esc(r.jdTitle)}</td><td>${r.recallAt3.toFixed(2)}</td><td>${r.mrr.toFixed(3)}</td><td>${r.hits}/${r.total}</td></tr>`).join('')}
+    </table>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px">检索采用 BM25 + 技能词典双通道；评测在每次 CI 推送中确定性复跑，指标跌破门禁即标红。</p>`;
+}
+
+$('#tabMatch').addEventListener('click', () => {
+  $('#tabMatch').classList.add('active'); $('#tabEvals').classList.remove('active');
+  $('#content').innerHTML = '<div class="empty">← 选择一个岗位开始</div>';
+});
+$('#tabEvals').addEventListener('click', () => {
+  $('#tabEvals').classList.add('active'); $('#tabMatch').classList.remove('active');
+  showEvals();
+});
+loadJds();
+</script>
+</body>
+</html>
