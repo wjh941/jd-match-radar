@@ -16,6 +16,7 @@ const path = require('node:path');
 const { RESUMES, JDS } = require('../server/seed');
 const { matchJd } = require('../lib/scorer');
 const { runEvals } = require('../evals/run-evals');
+const { toMarkdown } = require('../lib/report');
 
 const PORT = Number(process.env.PORT) || 4330;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -81,7 +82,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && matchMatch) {
       const jd = JDS.find((j) => j.id === matchMatch[1]);
       if (!jd) return send(res, 404, JSON.stringify({ error: 'JD 不存在' }));
-      return send(res, 200, JSON.stringify(matchJd(jd, RESUMES)));
+      const result = matchJd(jd, RESUMES);
+      if (url.searchParams.get('format') === 'md') {
+        // Markdown 归档/粘贴给用人经理（借鉴简历匹配类工具的报告导出惯例）
+        return send(res, 200, toMarkdown(result), 'text/markdown; charset=utf-8');
+      }
+      return send(res, 200, JSON.stringify(result));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/evals') {
